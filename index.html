@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technical Document Translator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: #ffffff;
+            border-radius: 1.5rem; /* More rounded corners */
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); /* Stronger shadow */
+        }
+        textarea {
+            resize: vertical;
+            min-height: 150px;
+            max-height: 400px;
+        }
+        .btn-primary {
+            background-image: linear-gradient(to right, #6366f1, #8b5cf6); /* Gradient background */
+            transition: all 0.2s ease-in-out;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px); /* Slight lift effect */
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.5), 0 4px 6px -2px rgba(99, 102, 241, 0.25);
+        }
+        .loading-spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #ffffff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="container">
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-8">Technical Document Translator</h1>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+                <label for="sourceLanguage" class="block text-gray-700 text-sm font-medium mb-2">Source Language:</label>
+                <select id="sourceLanguage" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm">
+                    <option value="en">English</option>
+                    <option value="zh">Chinese</option>
+                </select>
+            </div>
+            <div>
+                <label for="targetLanguage" class="block text-gray-700 text-sm font-medium mb-2">Target Language:</label>
+                <select id="targetLanguage" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm">
+                    <option value="zh">Chinese</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="mb-6">
+            <label for="fileInput" class="block text-gray-700 text-sm font-medium mb-2">Upload Document (TXT only, for PDF/DOCX please copy-paste text):</label>
+            <input type="file" id="fileInput" accept=".txt" class="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-full file:border-0
+                file:text-sm file:font-semibold
+                file:bg-indigo-50 file:text-indigo-700
+                hover:file:bg-indigo-100 cursor-pointer">
+            <p class="text-xs text-gray-500 mt-1">
+                *For PDF/DOCX files, please copy the text content and paste it into the "Source Text" box below for best results, as direct in-browser parsing of these formats is limited.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+                <label for="sourceText" class="block text-gray-700 text-sm font-medium mb-2">Source Text:</label>
+                <textarea id="sourceText" placeholder="Enter text or paste content from your technical document here..."
+                          class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"></textarea>
+            </div>
+            <div>
+                <label for="translatedText" class="block text-gray-700 text-sm font-medium mb-2">Translated Text:</label>
+                <textarea id="translatedText" placeholder="Translation will appear here..." readonly
+                          class="w-full p-3 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none cursor-not-allowed shadow-inner"></textarea>
+            </div>
+        </div>
+
+        <button id="translateBtn"
+                class="btn-primary w-full py-3 px-6 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl flex items-center justify-center space-x-2">
+            <span id="buttonText">Translate Document</span>
+            <div id="loadingSpinner" class="loading-spinner hidden"></div>
+        </button>
+
+        <div id="messageBox" class="mt-6 p-4 rounded-lg text-sm hidden" role="alert"></div>
+
+        <p class="text-center text-gray-500 text-xs mt-8">
+            Powered by AI (Gemini API). For highly critical or formal documents, human review is always recommended.
+            <br>
+            *Please note: Direct integration with Perplexity or other external AI models is not available in this environment.
+        </p>
+    </div>
+
+    <script type="module">
+        const sourceLanguageSelect = document.getElementById('sourceLanguage');
+        const targetLanguageSelect = document.getElementById('targetLanguage');
+        const fileInput = document.getElementById('fileInput');
+        const sourceTextarea = document.getElementById('sourceText');
+        const translatedTextarea = document.getElementById('translatedText');
+        const translateBtn = document.getElementById('translateBtn');
+        const buttonText = document.getElementById('buttonText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const messageBox = document.getElementById('messageBox');
+
+        // Global variables for Firebase (provided by the Canvas environment)
+        // Ensure these are defined if running outside Canvas for testing purposes
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Function to display messages in the message box
+        function showMessage(message, type = 'info') {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'bg-blue-100', 'text-blue-700');
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'text-red-700');
+            } else if (type === 'success') {
+                messageBox.classList.add('bg-green-100', 'text-green-700');
+            } else {
+                messageBox.classList.add('bg-blue-100', 'text-blue-700');
+            }
+        }
+
+        // Function to hide the message box
+        function hideMessage() {
+            messageBox.classList.add('hidden');
+        }
+
+        // Handle file input change
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                if (file.type === 'text/plain') {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        sourceTextarea.value = e.target.result;
+                        hideMessage();
+                    };
+                    reader.onerror = () => {
+                        showMessage('Error reading file.', 'error');
+                    };
+                    reader.readAsText(file);
+                } else {
+                    showMessage('Only .txt files are directly supported for upload. For PDF/DOCX, please copy-paste text.', 'info');
+                    sourceTextarea.value = ''; // Clear textarea if unsupported file type
+                }
+            } else {
+                sourceTextarea.value = '';
+            }
+        });
+
+        // Translate button click handler
+        translateBtn.addEventListener('click', async () => {
+            const sourceText = sourceTextarea.value.trim();
+            const sourceLang = sourceLanguageSelect.value;
+            const targetLang = targetLanguageSelect.value;
+
+            if (!sourceText) {
+                showMessage('Please enter text or upload a .txt file to translate.', 'error');
+                return;
+            }
+
+            if (sourceLang === targetLang) {
+                showMessage('Source and target languages cannot be the same. Please select different languages.', 'error');
+                return;
+            }
+
+            // Show loading state
+            translateBtn.disabled = true;
+            buttonText.textContent = 'Translating...';
+            loadingSpinner.classList.remove('hidden');
+            translatedTextarea.value = ''; // Clear previous translation
+            hideMessage();
+
+            try {
+                // Construct the prompt for the AI
+                const prompt = `Translate the following technical document text from ${sourceLang === 'en' ? 'English' : 'Chinese'} to ${targetLang === 'en' ? 'English' : 'Chinese'}. Ensure the translation is technically accurate, formal, and suitable for a general public audience.
+
+                Source Text:
+                ${sourceText}`;
+
+                let chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+                const payload = { contents: chatHistory };
+                const apiKey = ""; // Canvas will automatically provide the API key at runtime
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API error: ${response.status} ${response.statusText} - ${errorData.error?.message || 'Unknown error'}`);
+                }
+
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const translatedText = result.candidates[0].content.parts[0].text;
+                    translatedTextarea.value = translatedText;
+                    showMessage('Translation successful!', 'success');
+                } else {
+                    showMessage('Translation failed: No valid response from AI.', 'error');
+                    console.error('AI response structure unexpected:', result);
+                }
+
+            } catch (error) {
+                showMessage(`Translation error: ${error.message}`, 'error');
+                console.error('Translation API call failed:', error);
+            } finally {
+                // Hide loading state
+                translateBtn.disabled = false;
+                buttonText.textContent = 'Translate Document';
+                loadingSpinner.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
+
